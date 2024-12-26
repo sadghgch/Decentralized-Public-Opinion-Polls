@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decentralized Polls</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .poll-section {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+        .poll-creation {
+            display: flex;
+            flex-direction: column;
+        }
+        .poll-creation input, 
+        .poll-creation button {
+            margin: 10px 0;
+            padding: 10px;
+        }
+        .option-input {
+            display: flex;
+            align-items: center;
+        }
+        .option-input input {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+        .poll-list {
+            margin-top: 20px;
+        }
+        .poll-card {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .vote-options {
+            display: flex;
+            flex-direction: column;
+        }
+        .vote-options button {
+            margin: 5px 0;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .vote-options button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Decentralized Polls</h1>
+        
+        <!-- Poll Creation Section -->
+        <div class="poll-section">
+            <h2>Create a New Poll</h2>
+            <div class="poll-creation">
+                <input type="text" id="pollQuestion" placeholder="Enter poll question">
+                <div id="pollOptions">
+                    <div class="option-input">
+                        <input type="text" class="option" placeholder="Option 1">
+                        <button onclick="addOptionInput()">+</button>
+                    </div>
+                </div>
+                <input type="number" id="pollDuration" placeholder="Poll duration (days)">
+                <button onclick="createPoll()">Create Poll</button>
+            </div>
+        </div>
+
+        <!-- Existing Polls Section -->
+        <div class="poll-section">
+            <h2>Active Polls</h2>
+            <div id="pollList" class="poll-list">
+                <!-- Polls will be dynamically loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Contract ABI and Address (to be replaced with actual values)
+        const contractABI = [
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_question",
+				"type": "string"
+			},
+			{
+				"internalType": "string[]",
+				"name": "_options",
+				"type": "string[]"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_durationInDays",
+				"type": "uint256"
+			}
+		],
+		"name": "createPoll",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "pollId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "question",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "creator",
+				"type": "address"
+			}
+		],
+		"name": "PollCreated",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_pollId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "_optionId",
+				"type": "uint256"
+			}
+		],
+		"name": "vote",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "pollId",
+				"type": "uint256"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "voter",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "optionId",
+				"type": "uint256"
+			}
+		],
+		"name": "VoteCast",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_pollId",
+				"type": "uint256"
+			}
+		],
+		"name": "getPollInfo",
+		"outputs": [
+			{
+				"components": [
+					{
+						"internalType": "string",
+						"name": "question",
+						"type": "string"
+					},
+					{
+						"internalType": "string[]",
+						"name": "options",
+						"type": "string[]"
+					},
+					{
+						"internalType": "uint256",
+						"name": "startTime",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "endTime",
+						"type": "uint256"
+					},
+					{
+						"internalType": "address",
+						"name": "creator",
+						"type": "address"
+					},
+					{
+						"internalType": "uint256[]",
+						"name": "voteCounts",
+						"type": "uint256[]"
+					}
+				],
+				"internalType": "struct DecentralizedPolls.PollInfo",
+				"name": "",
+				"type": "tuple"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_pollId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "address",
+				"name": "_user",
+				"type": "address"
+			}
+		],
+		"name": "hasUserVoted",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_pollId",
+				"type": "uint256"
+			}
+		],
+		"name": "isPollActive",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "pollCount",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "polls",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "question",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "startTime",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "endTime",
+				"type": "uint256"
+			},
+			{
+				"internalType": "address",
+				"name": "creator",
+				"type": "address"
+			},
+			{
+				"internalType": "bool",
+				"name": "exists",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+]; 
+        const contractAddress = '0xA1AB3f7074eaB1a7871A7c3c25C87d77e999Be7e'; 
+
+        let web3;
+        let contract;
+        let userAccount;
+
+        // Initialize Web3 and Contract
+        async function initWeb3() {
+            if (window.ethereum) {
+                web3 = new Web3(window.ethereum);
+                try {
+                    // Request account access
+                    await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    const accounts = await web3.eth.getAccounts();
+                    userAccount = accounts[0];
+                    
+                    // Initialize contract
+                    contract = new web3.eth.Contract(contractABI, contractAddress);
+                    
+                    // Load existing polls
+                    loadPolls();
+                } catch (error) {
+                    console.error("User denied account access");
+                }
+            } else {
+                console.log('Please install MetaMask!');
+            }
+        }
+
+        // Add option input field
+        function addOptionInput() {
+            const optionsContainer = document.getElementById('pollOptions');
+            const optionCount = optionsContainer.children.length + 1;
+            
+            const optionDiv = document.createElement('div');
+            optionDiv.className = 'option-input';
+            optionDiv.innerHTML = `
+                <input type="text" class="option" placeholder="Option ${optionCount}">
+                <button onclick="this.parentElement.remove()">-</button>
+            `;
+            
+            optionsContainer.appendChild(optionDiv);
+        }
+
+        // Create a new poll
+        async function createPoll() {
+            const question = document.getElementById('pollQuestion').value;
+            const durationDays = document.getElementById('pollDuration').value;
+            
+            // Collect options
+            const optionInputs = document.querySelectorAll('#pollOptions .option');
+            const options = Array.from(optionInputs)
+                .map(input => input.value)
+                .filter(option => option.trim() !== '');
+            
+            // Validate inputs
+            if (!question || options.length < 2 || !durationDays) {
+                alert('Please fill in all fields. Minimum 2 options required.');
+                return;
+            }
+
+            try {
+                await contract.methods.createPoll(question, options, durationDays)
+                    .send({ from: userAccount });
+                
+                // Refresh polls list
+                loadPolls();
+                
+                // Clear input fields
+                document.getElementById('pollQuestion').value = '';
+                document.getElementById('pollDuration').value = '';
+                document.getElementById('pollOptions').innerHTML = `
+                    <div class="option-input">
+                        <input type="text" class="option" placeholder="Option 1">
+                        <button onclick="addOptionInput()">+</button>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error creating poll:', error);
+                alert('Failed to create poll. Check console for details.');
+            }
+        }
+
+        // Load existing polls
+        async function loadPolls() {
+            const pollList = document.getElementById('pollList');
+            pollList.innerHTML = ''; // Clear existing polls
+
+            // Get poll count
+            const pollCount = await contract.methods.pollCount().call();
+
+            // Fetch and display each poll
+            for (let i = 0; i < pollCount; i++) {
+                try {
+                    const pollInfo = await contract.methods.getPollInfo(i).call();
+                    const isActive = await contract.methods.isPollActive(i).call();
+                    const hasVoted = await contract.methods.hasUserVoted(i, userAccount).call();
+
+                    const pollCard = document.createElement('div');
+                    pollCard.className = 'poll-card';
+                    pollCard.innerHTML = `
+                        <h3>${pollInfo.question}</h3>
+                        <p>Duration: ${new Date(pollInfo.startTime * 1000).toLocaleDateString()} 
+                           - ${new Date(pollInfo.endTime * 1000).toLocaleDateString()}</p>
+                        <div class="vote-options">
+                            ${pollInfo.options.map((option, index) => `
+                                <button 
+                                    onclick="votePoll(${i}, ${index})" 
+                                    ${!isActive || hasVoted ? 'disabled' : ''}
+                                >
+                                    ${option} (${pollInfo.voteCounts[index]} votes)
+                                </button>
+                            `).join('')}
+                        </div>
+                    `;
+
+                    pollList.appendChild(pollCard);
+                } catch (error) {
+                    console.error(`Error loading poll ${i}:`, error);
+                }
+            }
+        }
+
+        // Vote on a poll
+        async function votePoll(pollId, optionId) {
+            try {
+                await contract.methods.vote(pollId, optionId)
+                    .send({ from: userAccount });
+                
+                // Refresh polls list
+                loadPolls();
+            } catch (error) {
+                console.error('Error voting:', error);
+                alert('Failed to vote. Check console for details.');
+            }
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', initWeb3);
+    </script>
+</body>
+</html>
